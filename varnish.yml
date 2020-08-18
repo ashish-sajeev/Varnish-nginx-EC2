@@ -47,16 +47,22 @@
         image: "{{ image }}"
         vpc_subnet_id: 
         wait: yes
-        count: 3
+        count: 1
         aws_access_key: "{{ aws_access_key }}"
         aws_secret_key: "{{ aws_secret_key }}"
         
         instance_tags:
            Name: "webserver"
       register: ec2
-    
+      
+    - debug:
+        var: item.private_ip
+      with_items: "{{ ec2.instances }}" 
+   
     - name: Add new instance to host group
       add_host:
         hostname: "{{ item.private_ip }}"
         groupname: webserver
       with_items: "{{ ec2.instances }}"
+
+     
