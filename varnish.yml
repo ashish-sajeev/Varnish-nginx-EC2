@@ -8,10 +8,13 @@
     keypair: ash
     instance_type: t2.micro
     subnet_id: subnet-751a191d
-    image: ami-02b5fbc2cb28b77b8
+    image: ami-08e76c6a76ebf6433
     mysqlinstance_image: ami-0b5bff6d9495eff69  
     aws_access_key: AKIAW4AVUN6KLJBN3D72
     aws_secret_key: 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
+    nginx_port: 8080
+    varnish_port: 80
+    default: default
     mysql_root: ash123
     mysql_database: wordpress
     mysql_user: wordpress-user
@@ -114,19 +117,117 @@
         delay: 10
         
      
-    - name: "nginx - Installing"
+    - name: "nginx installation"
       delegate_to: webserver
       become: yes
-      apt: 
-        name= {{ item }}
-        state = present
-      with_items:
-        - nginx 
-        - varnish
-            
-    - name: "mysql - Installing"
+      apt: name=nginx state=latest
+    
+    - name: "changing port"
+      delegate_to: webserver
+      become: yes
+      template:  
+        src: default.tmpl
+        dest: /etc/nginx/sites-available/default
+
+    - name: "restart nginx"
+      delegate_to: webserver
+      become: yes
+      service:
+          name: nginx
+          state: reloaded
+
+    - name: varnish installation
+      delegate_to: webserver
+      become: yes
+      apt: name=varnish state=latest update_cache=yes
+    
+    - name: changing varnish port in /etc/varnish/default.vcl
+      delegate_to: webserver
+      become: yes
+      template:
+        src: default.j2
+        dest: /etc/varnish/default.vcl
+    
+    - name: chaning varnish port in /etc/default/varnish
+      delegate_to: webserver
+      become: yes
+      template:
+        src: varnish.tmpl
+        dest: /etc/default/varnish       
+    
+    - name: "changing varnish.service port"
+      delegate_to: webserver
+      become: yes
+      template:
+        src: varnish.j2 
+        dest: /lib/systemd/system/varnish.service                        
+
+    - name: Ensure systemd is reloaded if varnish.service has changed
+      delegate_to: webserver
+      become: yes
+      shell: systemctl daemon-reload 
+    
+    - name: restart varnish
+      delegate_to: webserver
+      become: yes
+      shell: systemctl restart varnish
+
+    - name: "Mariadb-Server - Installation"
       delegate_to: dbserver
       become: yes
-      yum: 
-        name=mysql 
-        state=present
+      yum:
+        name:
+          - mariadb-server
+          - MySQL-python
+        state: present
+    
+    - name: "Mariadb-Server - Restarting & Enabling"
+      delegate_to: dbserver 
+      become: yes
+      service:
+        name: mariadb
+        state: restarted
+        enabled: true
+            
+    - name: "Mariadb-Server - Resetting Root Password"
+      delegate_to: dbserver
+      become: yes
+      ignore_errors: true
+      mysql_user:
+        login_user: "root"
+        login_password: ""
+        user: "root"
+        password: "{{ mysql_root }}"
+        host_all: yes
+    
+    - name: "Mariadb-server - Removing anonymous users"
+      delegate_to: dbserver
+      become: yes
+      mysql_user:
+        login_user: "root"
+        login_password: "{{ mysql_root }}"
+        user: ""
+        state: absent
+            
+            
+    - name: "Mariadb-server - creating additional database"
+      delegate_to: dbserver
+      become: yes
+      mysql_db:
+        login_user: "root"
+        login_password: "{{ mysql_root }}"
+        name: "{{ mysql_database }}"
+        state: present
+            
+    - name: "Mariadb-server - creating additional database"
+      delegate_to: webserver
+      become: yes
+      mysql_user:
+        login_user: "root"
+        login_password: "{{ mysql_root }}"
+        user: "{{ mysql_user }}"
+        password: "{{ mysql_password }}"
+        state: present
+        priv: "{{ mysql_database }}.*:ALL" 
+    
+    - 
