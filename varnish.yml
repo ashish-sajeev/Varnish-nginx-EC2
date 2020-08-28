@@ -10,9 +10,10 @@
     subnet_id: subnet-751a191d
     image: ami-08e76c6a76ebf6433
     mysqlinstance_image: ami-0ebc1ac48dfd14136  
-    aws_access_key: AKIAW4AVUN6KLJBN3D72
-    aws_secret_key: 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
-    P_IP: 172.31.32.10
+    aws_access_key: AKIAW4AVUN6KBCRR6YOD
+    aws_secret_key: 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
+    mysql_IP: 172.31.32.10
+    webserver_IP: 172.31.40.180
     nginx_port: 8080
     varnish_port: 80
     domain_name: ash.com
@@ -44,6 +45,10 @@
             from_port: 443
             to_port: 443
             cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 3306
+            to_port: 3306
+            cidr_ip: 0.0.0.0/0  
         rules_egress:
           - proto: all
             cidr_ip: 0.0.0.0/0
@@ -55,7 +60,8 @@
         key_name: "{{ keypair }}"
         instance_type: "{{ instance_type }}"
         image: "{{ image }}"
-        vpc_subnet_id: 
+        vpc_subnet_id: "{{ subnet_id }}"
+        private_ip: "{{ webserver_IP }}"
         wait: yes
         count: 1
         aws_access_key: "{{ aws_access_key }}"
@@ -91,7 +97,7 @@
         instance_type: "{{ instance_type }}"
         image: "{{ mysqlinstance_image }}"
         vpc_subnet_id: "{{ subnet_id }}"
-        private_ip: "{{ P_IP }}"
+        private_ip: "{{ mysql_IP }}"
         wait: yes
         count: 1
         aws_access_key: "{{ aws_access_key }}"
@@ -174,7 +180,12 @@
       delegate_to: webserver
       become: yes
       shell: systemctl restart varnish
-
+    
+    - name: "php installation"
+      delegate_to: webserver
+      become: yes
+      apt: name=php,php-mysql,php-fpm state=present
+      
     - name: "Mysql - Installation"
       delegate_to: dbserver
       become: yes
@@ -204,16 +215,7 @@
         password: "{{ mysql_root }}"
         host_all: yes
     
-    - name: "Mysql - Removing anonymous users"
-      delegate_to: dbserver
-      become: yes
-      mysql_user:
-        login_user: "root"
-        login_password: "{{ mysql_root }}"
-        user: ""
-        state: absent
-            
-            
+        
     - name: "Mysql - creating additional database"
       delegate_to: dbserver
       become: yes
@@ -233,6 +235,7 @@
         password: "{{ mysql_password }}"
         state: present
         priv: "{{ mysql_database }}.*:ALL" 
+        host: "{{ webserver_IP }}"
     
     - name: " Creating document root"
       delegate_to: webserver
@@ -240,6 +243,8 @@
       file:
          path: /var/www/html/{{domain_name}}
          state: directory
+         owner: www-data
+         group: www-data
          
 
     - name: " creating virtualhost"
@@ -277,6 +282,11 @@
       delegate_to: webserver
       become: yes
       shell: "cp -r /tmp/wordpress/* /var/www/html/{{domain_name}}"
+
+    - name: "Wordpress - file ownership "
+      delegate_to: webserver
+      become: yes
+      shell: " chown -R www-data:www-data /var/www/html/{{domain_name}}"   
 
     - name: "Wordpress- Creating wp-config.php"
       delegate_to: webserver
