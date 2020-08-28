@@ -10,8 +10,8 @@
     subnet_id: subnet-751a191d
     image: ami-08e76c6a76ebf6433
     mysqlinstance_image: ami-0ebc1ac48dfd14136  
-    aws_access_key: AKIAW4AVUN6KBCRR6YOD
-    aws_secret_key: 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
+    aws_access_key: AKID*************
+    aws_secret_key: lpJywA5XMrKgB******************
     mysql_IP: 172.31.32.10
     webserver_IP: 172.31.40.180
     nginx_port: 8080
